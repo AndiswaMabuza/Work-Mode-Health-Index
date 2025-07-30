@@ -60,28 +60,28 @@ with tab1:
 
 # ---------- TAB 2: Diagnostics ----------
 with tab2:
-    st.header("🧠 Burnout Differences by Work Mode")
-    
-    model = ols("Burnout_Level_Encoded ~ C(Work_Arrangement)", data=df).fit()
-    anova_result = sm.stats.anova_lm(model, typ=2)
-    st.subheader("ANOVA Result")
-    st.dataframe(anova_result)
-
     tukey = pairwise_tukeyhsd(endog=df["Burnout_Level_Encoded"], groups=df["Work_Arrangement"], alpha=0.05)
     tukey_df = pd.DataFrame(data=tukey._results_table.data[1:], columns=tukey._results_table.data[0])
+
+    tukey_df["comparison"] = tukey_df["group1"] + " vs " + tukey_df["group2"]
+    tukey_df["error_top"] = tukey_df["upper"] - tukey_df["meandiff"]
+    tukey_df["error_bottom"] = tukey_df["meandiff"] - tukey_df["lower"]
 
     st.subheader("Tukey HSD Result (Visual)")
     fig = px.bar(
         tukey_df,
-        x="group1",
+        x="comparison",
         y="meandiff",
         color="reject",
-        error_y="std_err",
-        hover_data=["group2", "p-adj"],
-        title="Tukey HSD Mean Differences Between Work Arrangements"
+        error_y="error_top",
+        error_y_minus="error_bottom",
+        hover_data=["p-adj"],
+        title="Tukey HSD Mean Differences Between Work Arrangements",
+        labels={"meandiff": "Mean Difference", "comparison": "Group Comparison"}
     )
     st.plotly_chart(fig, use_container_width=True)
     st.dataframe(tukey_df)
+
 
 # ---------- TAB 3: Predictive Model ----------
 with tab3:

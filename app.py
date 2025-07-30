@@ -1,10 +1,10 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import plotly.express as px
 import shap
 import matplotlib.pyplot as plt
 import seaborn as sns
+import plotly.express as px
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report
@@ -18,7 +18,7 @@ st.set_page_config(layout="wide")
 # ---------- LOAD DATA ----------
 @st.cache_data
 def load_data():
-    df = pd.read_csv("post_pandemic_remote_work_health_impact_2025.csv", parse_dates=["Survey_Date"])
+    df = pd.read_csv("your_dataset.csv", parse_dates=["Survey_Date"])
     df["Num_Physical_Issues"] = df["Physical_Health_Issues"].fillna("None").apply(lambda x: 0 if x == "None" else len(x.split(";")))
     salary_map = {
         "$40K-60K": 50000, "$60K-80K": 70000, "$80K-100K": 90000,
@@ -40,7 +40,7 @@ selected_region = st.sidebar.selectbox("Select Region", df["Region"].unique())
 selected_work_modes = ["Onsite", "Remote", "Hybrid"]
 
 # ---------- TABS ----------
-tab1, tab2, tab3, tab4 = st.tabs(["📊 EDA", "🧠 Diagnostics", "🤖 Predictive Model", "🔮 Scenario Simulation"])
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["📊 EDA", "🧠 Diagnostics", "🤖 Predictive Model", "🔮 Scenario Simulation", "🎯 Recommendations"])
 
 # ---------- TAB 1: EDA ----------
 with tab1:
@@ -60,14 +60,28 @@ with tab1:
 
 # ---------- TAB 2: Diagnostics ----------
 with tab2:
-    st.header("🧠 ANOVA and Tukey HSD")
+    st.header("🧠 Burnout Differences by Work Mode")
+    
     model = ols("Burnout_Level_Encoded ~ C(Work_Arrangement)", data=df).fit()
     anova_result = sm.stats.anova_lm(model, typ=2)
-    st.write("ANOVA Result", anova_result)
+    st.subheader("ANOVA Result")
+    st.dataframe(anova_result)
 
     tukey = pairwise_tukeyhsd(endog=df["Burnout_Level_Encoded"], groups=df["Work_Arrangement"], alpha=0.05)
-    st.text("Tukey HSD Result")
-    st.text(tukey.summary())
+    tukey_df = pd.DataFrame(data=tukey._results_table.data[1:], columns=tukey._results_table.data[0])
+
+    st.subheader("Tukey HSD Result (Visual)")
+    fig = px.bar(
+        tukey_df,
+        x="group1",
+        y="meandiff",
+        color="reject",
+        error_y="std_err",
+        hover_data=["group2", "p-adj"],
+        title="Tukey HSD Mean Differences Between Work Arrangements"
+    )
+    st.plotly_chart(fig, use_container_width=True)
+    st.dataframe(tukey_df)
 
 # ---------- TAB 3: Predictive Model ----------
 with tab3:
@@ -107,7 +121,6 @@ with tab4:
 
     st.dataframe(sc_df[["Work_Arrangement", "Predicted_Burnout", "Label"]])
 
-    # SHAP explainability
     st.subheader("🔍 SHAP Waterfall (First Scenario)")
     explainer = shap.TreeExplainer(model)
     shap_values = explainer.shap_values(sc_X)
@@ -122,8 +135,30 @@ with tab4:
     )
     st.pyplot(fig)
 
-    st.caption("Waterfall plot explains why the model gave this burnout prediction.")
+# ---------- TAB 5: Recommendations ----------
+with tab5:
+    st.header("🎯 Recommended Work Modes by Role + Region")
+
+    recommendations = []
+    for (role, region), group in df.groupby(["Job_Role", "Region"]):
+        if len(group["Work_Arrangement"].unique()) < 2:
+            continue
+        avg_burnout = group.groupby("Work_Arrangement")["Burnout_Level_Encoded"].mean()
+        recommended = avg_burnout.idxmin()
+        recommendations.append({
+            "Job_Role": role,
+            "Region": region,
+            "Recommended_Work_Mode": recommended,
+            "Avg_Burnout_Score": avg_burnout[recommended]
+        })
+
+    recommend_df = pd.DataFrame(recommendations).sort_values("Avg_Burnout_Score")
+    st.dataframe(recommend_df)
+
+    fig = px.bar(recommend_df.head(20), x="Avg_Burnout_Score", y="Job_Role", color="Recommended_Work_Mode", 
+                 orientation="h", hover_data=["Region"], title="Top Recommended Work Modes (Lowest Burnout)")
+    st.plotly_chart(fig, use_container_width=True)
 
 # ---------- END ----------
 st.markdown("---")
-st.markdown("🧠 Built by Senior Andiswa Mabuza - Amabuza53@gmail.com | © 2025")
+st.markdown("🧠 Built by Andiswa Mabuza - Amabuza53@gmail.com | © 2025")
